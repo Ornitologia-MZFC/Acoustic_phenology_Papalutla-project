@@ -1,0 +1,382 @@
+#MODELS AND GRAPHICS
+library(readr)
+library(dplyr)
+library(tidyr)
+library(lme4)        
+library(lmerTest)    
+library(DHARMa)     
+library(car)         
+library(emmeans)
+library(ggplot2)
+library(glmmTMB)    
+
+setwd("F:/Papalutla")
+datos_largo <- read_csv("BASE_DATOS_LARGO_2.csv",
+                        locale = locale(encoding = "Latin1"))
+
+datos_largo_z <- datos_largo %>%
+  mutate(
+    hora_z = scale(hora, center = TRUE, scale = TRUE),
+    Luz_z  = scale(Luz, center = TRUE, scale = TRUE),
+    Temp_z = scale(Temp, center = TRUE, scale = TRUE),
+    NDVI_z = scale(NDVI, center = TRUE, scale = TRUE)
+  )
+
+modelo_BI <- lmer(
+  BI ~ (Luz_z + Temp_z + NDVI_z) * sitio_type * temporada +
+    (1 | sitio_id),
+  data = datos_largo_z
+)
+
+summary(modelo_BI)
+
+modelo_ACI <- lmer(
+  ACI ~ (Luz_z + Temp_z + NDVI_z) * sitio_type * temporada +
+    (1 | sitio_id),
+  data = datos_largo_z
+)
+
+summary(modelo_ACI)
+
+modelo_cantos <- glmmTMB(
+  cantos ~ (Luz_z + Temp_z + NDVI_z) * sitio_type * temporada +
+    (1 | sitio_id),
+  family = nbinom2,
+  data = datos_largo_z
+)
+
+modelo_cantos_simple <- glmer.nb(
+  cantos ~ temporada * sitio_type +
+    Luz_z + Temp_z + NDVI_z +
+    (1 | sitio_id),
+  data = datos_largo_z,
+  control = glmerControl(optimizer = "bobyqa")
+)
+
+summary(modelo_cantos_simple)
+
+Anova(modelo_BI, type = 3)
+Anova(modelo_ACI, type = 3)
+Anova(modelo_cantos_simple, type = 3)
+
+sim_cantos <- simulateResiduals(modelo_cantos_simple)
+plot(sim_cantos)
+
+plot(modelo_BI)
+qqnorm(residuals(modelo_BI))
+qqline(residuals(modelo_BI))
+
+plot(modelo_ACI)
+qqnorm(residuals(modelo_ACI))
+qqline(residuals(modelo_ACI))
+
+posthoc_BI <- emmeans(modelo_BI, pairwise ~ sitio_type | temporada)
+posthoc_BI$contrasts
+
+posthoc_ACI <- emmeans(modelo_ACI, pairwise ~ sitio_type | temporada)
+posthoc_ACI$contrasts
+
+posthoc_cantos <- emmeans(
+  modelo_cantos_simple,
+  pairwise ~ sitio_type | temporada,
+  type = "response"
+)
+
+emmeans(modelo_BI, pairwise ~ temporada | sitio_type)
+emmeans(modelo_ACI, pairwise ~ temporada | sitio_type)
+
+emm_BI <- emmeans(modelo_BI, ~ temporada * sitio_type)
+df_BI <- as.data.frame(emm_BI)
+
+ggplot(df_BI, aes(x = temporada, y = emmean, color = sitio_type, group = sitio_type)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.2,
+    linewidth = 0.8
+  ) +
+  scale_color_manual(
+    values = c("Barranca" = "steelblue", "Loma" = "goldenrod2"),
+    labels = c("Barranca" = "TSF", "Loma" = "DTF"),
+    name = "Habitat:"
+  ) +
+  labs(
+    x = "Sampling Periodos",
+    y = "BI (adjusted average)",
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, face = "bold", size = 20),
+    axis.text.y = element_text(face = "bold", size = 19),
+    axis.title = element_text(face = "bold", size = 20),
+    plot.title = element_text(face = "bold", size = 16, hjust = 1),
+    legend.position = c(0.11, 0.23),
+    legend.justification = c(1, 1),
+    legend.direction = "vertical",
+    legend.background = element_rect (fill = "white", color = "black"),
+    legend.title = element_text(face = "bold", size = 19),
+    legebd.text = (size = 18)
+  )
+
+
+emm_ACI <- emmeans(modelo_ACI, ~ temporada * sitio_type)
+df_ACI <- as.data.frame(emm_ACI)
+
+ggplot(df_ACI, aes(x = temporada, y = emmean, color = sitio_type, group = sitio_type)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.2,
+    linewidth = 0.8
+  ) +
+  scale_color_manual(
+    values = c("Barranca" = "steelblue", "Loma" = "goldenrod2"),
+    labels = c("Barranca" = "TSF", "Loma" = "DTF"),
+    name = "Habitat:"
+  ) +
+  labs(
+    x = "Sampling Periodos",
+    y = "ACI (adjusted average)",
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, face = "bold", size = 20),
+    axis.text.y = element_text(face = "bold", size = 19),
+    axis.title = element_text(face = "bold", size = 20),
+    plot.title = element_text(face = "bold", size = 16, hjust = 1),
+    legend.position = c(0.11, 0.23),
+    legend.justification = c(1, 1),
+    legend.direction = "vertical",
+    legend.background = element_rect (fill = "white", color = "black"),
+    legend.title = element_text(face = "bold", size = 19),
+    legebd.text = (size = 18)
+  )
+
+emm_luz_BI <- emmeans(
+  modelo_BI,
+  ~ Luz_z | sitio_type * temporada,
+  at = list(Luz_z = seq(-2, 2, length.out = 30))
+)
+
+df_luz_BI <- as.data.frame(emm_luz_BI)
+
+ggplot(df_luz_BI, aes(x = Luz_z, y = emmean, color = sitio_type)) +
+  geom_line() +
+  facet_wrap(~temporada) +
+  labs(
+    x = "Luz (z)",
+    y = "BI",
+    color = "Hábitat"
+  ) +
+  theme_minimal()
+
+emm_temp_BI <- emmeans(
+  modelo_BI,
+  ~ Temp_z | sitio_type * temporada,
+  at = list(Temp_z = seq(-2, 2, length.out = 30))
+)
+
+df_temp_BI <- as.data.frame(emm_temp_BI)
+
+ggplot(df_temp_BI, aes(x = Temp_z, y = emmean, color = sitio_type)) +
+  geom_line() +
+  facet_wrap(~temporada) +
+  labs(
+    x = "Temperatura (z)",
+    y = "BI"
+  ) +
+  theme_minimal()
+
+emm_luz_ACI <- emmeans(
+  modelo_ACI,
+  ~ Luz_z | sitio_type * temporada,
+  at = list(Luz_z = seq(-2, 2, length.out = 30))
+)
+
+df_luz_ACI <- as.data.frame(emm_luz_ACI)
+
+ggplot(df_luz_ACI, aes(x = Luz_z, y = emmean, color = sitio_type)) +
+  geom_line() +
+  facet_wrap(~temporada) +
+  labs(x = "Luz (z)", y = "ACI") +
+  theme_minimal()
+
+emm_temp_ACI <- emmeans(
+  modelo_ACI,
+  ~ Temp_z | sitio_type * temporada,
+  at = list(Temp_z = seq(-2, 2, length.out = 30))
+)
+
+df_temp_ACI <- as.data.frame(emm_temp_ACI)
+
+ggplot(df_temp_ACI, aes(x = Temp_z, y = emmean, color = sitio_type)) +
+  geom_line() +
+  facet_wrap(~temporada) +
+  theme_minimal()
+
+emm_ndvi_ACI <- emmeans(
+  modelo_ACI,
+  ~ NDVI_z | sitio_type * temporada,
+  at = list(NDVI_z = seq(-2, 2, length.out = 30))
+)
+
+df_ndvi_ACI <- as.data.frame(emm_ndvi_ACI)
+
+ggplot(df_ndvi_ACI, aes(x = NDVI_z, y = emmean, color = sitio_type)) +
+  geom_line() +
+  facet_wrap(~temporada) +
+  theme_minimal()
+
+df_cantos <- as.data.frame(posthoc_cantos)
+
+df_cantos <- df_cantos %>%
+  dplyr::filter(sitio_type != ".")
+
+ggplot(df_cantos, aes(x = temporada, y = response, 
+                      color = sitio_type, group = sitio_type)) +
+  
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.2,
+    linewidth = 0.8
+  ) +
+  scale_color_manual(
+    values = c("Barranca" = "steelblue", "Loma" = "goldenrod2"),
+    labels = c("Barranca" = "TSF", "Loma" = "DTF"),
+    name = "Habitat:"
+  ) +
+  labs(
+    x = "Sampling Periodos",
+    y = "Number of calls (estimated average)",
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, face = "bold", size = 20),
+    axis.text.y = element_text(face = "bold", size = 19),
+    axis.title = element_text(face = "bold", size = 20),
+    plot.title = element_text(face = "bold", size = 16, hjust = 1),
+    legend.position = c(0.11, 0.23),
+    legend.justification = c(1, 1),
+    legend.direction = "vertical",
+    legend.background = element_rect (fill = "white", color = "black"),
+    legend.title = element_text(face = "bold", size = 19),
+    legebd.text = (size = 18)
+  )
+
+
+
+#TABLE ANOVA
+anova_BI <- as.data.frame(Anova(modelo_BI, type = 3))
+anova_BI$Efecto <- rownames(anova_BI)
+anova_BI$Modelo <- "BI"
+
+anova_ACI <- as.data.frame(Anova(modelo_ACI, type = 3))
+anova_ACI$Efecto <- rownames(anova_ACI)
+anova_ACI$Modelo <- "ACI"
+
+anova_cantos <- as.data.frame(Anova(modelo_cantos_simple, type = 3))
+anova_cantos$Efecto <- rownames(anova_cantos)
+anova_cantos$Modelo <- "Cantos"
+
+tabla_anova <- bind_rows(anova_BI, anova_ACI, anova_cantos)
+
+efectos_clave <- c(
+  "temporada",
+  "sitio_type",
+  "Luz_z",
+  "Temp_z",
+  "NDVI_z",
+  "temporada:sitio_type"
+)
+
+tabla_anova_filtrada <- tabla_anova %>%
+  filter(
+    (`Pr(>Chisq)` < 0.05) |
+      (Efecto %in% efectos_clave)
+  )
+
+
+tabla_anova_final <- tabla_anova_filtrada %>%
+  select(Modelo, Efecto, Chisq, Df, `Pr(>Chisq)`) %>%
+  rename(
+    Chi2 = Chisq,
+    gl = Df,
+    p_value = `Pr(>Chisq)`
+  )
+
+tabla_anova_final <- tabla_anova_final %>%
+  mutate(
+    p_value = ifelse(p_value < 0.001, "<0.001", round(p_value, 4)),
+    Chi2 = round(Chi2, 2)
+  )
+
+
+tabla_anova_final <- tabla_anova_final %>%
+  arrange(Modelo, p_value)
+
+
+#TABLE COEFINCENT
+
+library(broom.mixed)
+library(dplyr)
+
+coef_BI <- broom.mixed::tidy(modelo_BI, effects = "fixed") %>%
+  mutate(
+    Modelo = "LMM",
+    Respuesta = "BI"
+  )
+
+coef_ACI <- broom.mixed::tidy(modelo_ACI, effects = "fixed") %>%
+  mutate(
+    Modelo = "LMM",
+    Respuesta = "ACI"
+  )
+
+coef_cantos <- broom.mixed::tidy(modelo_cantos_simple, effects = "fixed") %>%
+  mutate(
+    Modelo = "GLMM (NB)",
+    Respuesta = "Cantos"
+  )
+
+tabla_coeficientes <- bind_rows(coef_BI, coef_ACI, coef_cantos) %>%
+  select(
+    Modelo,
+    Respuesta,
+    term,
+    estimate,
+    std.error,
+    statistic,
+    p.value
+  ) %>%
+  rename(
+    Efecto = term,
+    Estimate = estimate,
+    SE = std.error,
+    Estadistico = statistic,
+    p_value = p.value
+  )
+
+tabla_coeficientes
+
+tabla_filtrada <- tabla_coeficientes %>%
+  dplyr::filter(
+    p_value < 0.05 | 
+      !grepl(":", Efecto)   # mantiene efectos principales
+  )
+
+tabla_BI <- tabla_filtrada %>% filter(Respuesta == "BI")
+tabla_ACI <- tabla_filtrada %>% filter(Respuesta == "ACI")
+tabla_cantos <- tabla_filtrada %>% filter(Respuesta == "Cantos")
+
+tabla_BI <- tabla_BI %>%
+  arrange(p_value)
+
+tabla_ACI <- tabla_ACI %>%
+  arrange(p_value)
+
+tabla_cantos <- tabla_cantos %>%
+  arrange(p_value)
