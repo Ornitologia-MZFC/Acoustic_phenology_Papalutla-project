@@ -1,3 +1,5 @@
+![](papalutla_landscape.jpeg) 
+
 This repository contains raw data and R script corresponding to the paper entitled **Acoustic phenology of the dawn chorus in a bird community of a Mexican tropical dry forest** by Rodolfo Javier Flores-Vázquez, Leopoldo Daniel Vázquez-Reyes, Alejandro Martínez-Gordillo and Adolfo Gerardo Navarro Sigüenza, submitted to Journal of Avian Biology. 
   
 **Background**  
